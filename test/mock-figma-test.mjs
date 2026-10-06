@@ -198,4 +198,30 @@ const itemNames = ellipses.filter((e) => e.name !== 'Logo').map((e) => e.name).s
 assert.deepEqual(itemNames, ['Kurse | /courses', 'Start | /'], 'item ellipses should be named "Label | route"');
 
 console.log('✓ Import direction (ZenOrbit → Figma) passed.');
+
+// ── Validation preview: valid and invalid payloads ──────────────────────
+posted.length = 0;
+globalThis.figma.ui.onmessage({ type: 'validateJson', json: JSON.stringify(importPayload) });
+assert.equal(posted.length, 1, 'expected one validation response');
+assert.equal(posted[0].type, 'validationResult');
+assert.equal(posted[0].valid, true);
+assert.equal(posted[0].preview.itemCount, 2);
+assert.deepEqual(posted[0].preview.labels, ['Start', 'Kurse']);
+
+posted.length = 0;
+globalThis.figma.ui.onmessage({
+  type: 'validateJson',
+  json: JSON.stringify({ menuItems: [{ label: '', angle: 'top' }] }),
+});
+assert.equal(posted.length, 1, 'expected one invalid validation response');
+assert.equal(posted[0].type, 'validationResult');
+assert.equal(posted[0].valid, false);
+assert.match(posted[0].message, /label/);
+
+posted.length = 0;
+globalThis.figma.ui.onmessage({ type: 'validateJson', json: '{not-json}' });
+assert.equal(posted[0].valid, false);
+assert.match(posted[0].message, /kein gültiges JSON/);
+
+console.log('✓ JSON validation preview passed.');
 console.log('\n✓ All assertions passed — both directions of dist/code.js work against the mocked Figma API.');

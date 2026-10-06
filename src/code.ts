@@ -180,6 +180,104 @@ type ProjectJsonLike = {
   menuItemTextColor?: string;
 };
 
+type ValidationPreview = {
+  itemCount: number;
+  radius: number;
+  buttonSize: number;
+  logoText: string;
+  labels: string[];
+  colors: string[];
+  warnings: string[];
+};
+
+function parseProjectJson(rawJson: string): { data: ProjectJsonLike; preview: ValidationPreview } {
+  let value: unknown;
+  try {
+    value = JSON.parse(rawJson);
+  } catch {
+    throw new Error('Das ist kein gültiges JSON. Bitte den Project-JSON-Export aus ZenOrbit einfügen.');
+  }
+
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Der Project-JSON-Export muss ein JSON-Objekt sein.');
+  }
+
+  const input = value as Record<string, unknown>;
+  if (!Array.isArray(input.menuItems) || input.menuItems.length === 0) {
+    throw new Error('Im JSON fehlt ein nicht-leeres "menuItems"-Array. Bitte den Project-JSON-Export statt React/CSS einfügen.');
+  }
+
+  const menuItems = input.menuItems.map((rawItem, index) => {
+    if (!rawItem || typeof rawItem !== 'object' || Array.isArray(rawItem)) {
+      throw new Error(`Menü-Item ${index + 1} ist kein gültiges Objekt.`);
+    }
+    const item = rawItem as Record<string, unknown>;
+    const label = typeof item.label === 'string' ? item.label.trim() : '';
+    if (!label) throw new Error(`Menü-Item ${index + 1} benötigt ein nicht-leeres "label".`);
+    if (typeof item.angle !== 'number' || !Number.isFinite(item.angle)) {
+      throw new Error(`Menü-Item „${label}" benötigt einen gültigen numerischen "angle".`);
+    }
+    if (item.route !== undefined && typeof item.route !== 'string') {
+      throw new Error(`Menü-Item „${label}" enthält eine ungültige "route".`);
+    }
+    return { label, angle: item.angle, route: (item.route as string | undefined) || slugify(label) };
+  });
+
+  const positiveNumber = (key: 'radius' | 'buttonSize', fallback: number): number => {
+    const candidate = input[key];
+    if (candidate === undefined) return fallback;
+    if (typeof candidate !== 'number' || !Number.isFinite(candidate) || candidate <= 0) {
+      throw new Error(`"${key}" muss eine positive Zahl sein.`);
+    }
+    return candidate;
+  };
+
+  const optionalText = (key: string): string | undefined => {
+    const candidate = input[key];
+    if (candidate === undefined) return undefined;
+    if (typeof candidate !== 'string') throw new Error(`"${key}" muss Text sein.`);
+    return candidate.trim() || undefined;
+  };
+
+  const colorKeys = [
+    'buttonBgColor',
+    'buttonOutlineColor',
+    'menuItemBgColor',
+    'menuItemOutlineColor',
+    'menuItemTextColor',
+  ] as const;
+  const colors: Partial<Record<(typeof colorKeys)[number], string>> = {};
+  for (const key of colorKeys) {
+    const candidate = optionalText(key);
+    if (candidate && !/^#[0-9a-f]{6}$/i.test(candidate)) {
+      throw new Error(`"${key}" muss eine Hex-Farbe wie #D0CBB8 sein.`);
+    }
+    if (candidate) colors[key] = candidate.toUpperCase();
+  }
+
+  const radius = positiveNumber('radius', 120);
+  const buttonSize = positiveNumber('buttonSize', 64);
+  const logoText = optionalText('logoText') || 'ZO';
+  const warnings: string[] = [];
+  if (input.radius === undefined) warnings.push('Radius fehlt – Standard 120 px wird verwendet.');
+  if (input.buttonSize === undefined) warnings.push('Button-Größe fehlt – Standard 64 px wird verwendet.');
+  if (!input.logoText) warnings.push('Logo-Text fehlt – „ZO" wird verwendet.');
+
+  const data: ProjectJsonLike = { menuItems, radius, buttonSize, logoText, ...colors };
+  return {
+    data,
+    preview: {
+      itemCount: menuItems.length,
+      radius,
+      buttonSize,
+      logoText,
+      labels: menuItems.map((item) => item.label),
+      colors: Object.values(colors),
+      warnings,
+    },
+  };
+}
+
 // Zeichnet eine Orbit-Gruppe (Center-Node "Logo" + Item-Nodes im Kreis) aus
 // ZenOrbit-Konfigurationsdaten auf den Canvas — die Umkehrung von
 // buildProjectJson(): dieselbe Node-Konvention, nur in die andere Richtung.
@@ -266,16 +364,8 @@ async function createDemoMockup(): Promise<void> {
 }
 
 async function importProjectJson(rawJson: string): Promise<void> {
-  let parsed: ProjectJsonLike;
-  try {
-    parsed = JSON.parse(rawJson);
-  } catch {
-    throw new Error('Das ist kein gültiges JSON. Bitte den Export aus dem ZenOrbit Customizer (Delivery Studio → JSON) einfügen.');
-  }
-  if (!parsed || !Array.isArray(parsed.menuItems) || parsed.menuItems.length === 0) {
-    throw new Error('Im JSON fehlt ein "menuItems"-Array. Bitte den Project-JSON-Export aus ZenOrbit einfügen, nicht den React/CSS-Export.');
-  }
-  await createMockupFromData(parsed, 'ZenOrbit Import');
+  const { data } = parseProjectJson(rawJson);
+  await createMockupFromData(data, 'ZenOrbit Import');
 }
 
 figma.ui.onmessage = (msg: { type: string; json?: string }) => {
@@ -296,6 +386,18 @@ figma.ui.onmessage = (msg: { type: string; json?: string }) => {
     importProjectJson(msg.json || '')
       .then(() => figma.ui.postMessage({ type: 'importDone' }))
       .catch((err) => figma.ui.postMessage({ type: 'error', message: err instanceof Error ? err.message : String(err) }));
+  }
+  if (msg.type === 'validateJson') {
+    try {
+      const { preview } = parseProjectJson(msg.json || '');
+      figma.ui.postMessage({ type: 'validationResult', valid: true, preview });
+    } catch (err) {
+      figma.ui.postMessage({
+        type: 'validationResult',
+        valid: false,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
   if (msg.type === 'close') {
     figma.closePlugin();

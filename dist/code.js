@@ -147,6 +147,85 @@
     const n = parseInt(match[1], 16);
     return { r: (n >> 16 & 255) / 255, g: (n >> 8 & 255) / 255, b: (n & 255) / 255 };
   }
+  function parseProjectJson(rawJson) {
+    let value;
+    try {
+      value = JSON.parse(rawJson);
+    } catch (e) {
+      throw new Error("Das ist kein g\xFCltiges JSON. Bitte den Project-JSON-Export aus ZenOrbit einf\xFCgen.");
+    }
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error("Der Project-JSON-Export muss ein JSON-Objekt sein.");
+    }
+    const input = value;
+    if (!Array.isArray(input.menuItems) || input.menuItems.length === 0) {
+      throw new Error('Im JSON fehlt ein nicht-leeres "menuItems"-Array. Bitte den Project-JSON-Export statt React/CSS einf\xFCgen.');
+    }
+    const menuItems = input.menuItems.map((rawItem, index) => {
+      if (!rawItem || typeof rawItem !== "object" || Array.isArray(rawItem)) {
+        throw new Error(`Men\xFC-Item ${index + 1} ist kein g\xFCltiges Objekt.`);
+      }
+      const item = rawItem;
+      const label = typeof item.label === "string" ? item.label.trim() : "";
+      if (!label) throw new Error(`Men\xFC-Item ${index + 1} ben\xF6tigt ein nicht-leeres "label".`);
+      if (typeof item.angle !== "number" || !Number.isFinite(item.angle)) {
+        throw new Error(`Men\xFC-Item \u201E${label}" ben\xF6tigt einen g\xFCltigen numerischen "angle".`);
+      }
+      if (item.route !== void 0 && typeof item.route !== "string") {
+        throw new Error(`Men\xFC-Item \u201E${label}" enth\xE4lt eine ung\xFCltige "route".`);
+      }
+      return { label, angle: item.angle, route: item.route || slugify(label) };
+    });
+    const positiveNumber = (key, fallback) => {
+      const candidate = input[key];
+      if (candidate === void 0) return fallback;
+      if (typeof candidate !== "number" || !Number.isFinite(candidate) || candidate <= 0) {
+        throw new Error(`"${key}" muss eine positive Zahl sein.`);
+      }
+      return candidate;
+    };
+    const optionalText = (key) => {
+      const candidate = input[key];
+      if (candidate === void 0) return void 0;
+      if (typeof candidate !== "string") throw new Error(`"${key}" muss Text sein.`);
+      return candidate.trim() || void 0;
+    };
+    const colorKeys = [
+      "buttonBgColor",
+      "buttonOutlineColor",
+      "menuItemBgColor",
+      "menuItemOutlineColor",
+      "menuItemTextColor"
+    ];
+    const colors = {};
+    for (const key of colorKeys) {
+      const candidate = optionalText(key);
+      if (candidate && !/^#[0-9a-f]{6}$/i.test(candidate)) {
+        throw new Error(`"${key}" muss eine Hex-Farbe wie #D0CBB8 sein.`);
+      }
+      if (candidate) colors[key] = candidate.toUpperCase();
+    }
+    const radius = positiveNumber("radius", 120);
+    const buttonSize = positiveNumber("buttonSize", 64);
+    const logoText = optionalText("logoText") || "ZO";
+    const warnings = [];
+    if (input.radius === void 0) warnings.push("Radius fehlt \u2013 Standard 120 px wird verwendet.");
+    if (input.buttonSize === void 0) warnings.push("Button-Gr\xF6\xDFe fehlt \u2013 Standard 64 px wird verwendet.");
+    if (!input.logoText) warnings.push('Logo-Text fehlt \u2013 \u201EZO" wird verwendet.');
+    const data = __spreadValues({ menuItems, radius, buttonSize, logoText }, colors);
+    return {
+      data,
+      preview: {
+        itemCount: menuItems.length,
+        radius,
+        buttonSize,
+        logoText,
+        labels: menuItems.map((item) => item.label),
+        colors: Object.values(colors),
+        warnings
+      }
+    };
+  }
   async function createMockupFromData(data, groupName) {
     await figma.loadFontAsync({ family: "Inter", style: "Regular" });
     const dark = { r: 0.1, g: 0.1, b: 0.1 };
@@ -219,16 +298,8 @@
     );
   }
   async function importProjectJson(rawJson) {
-    let parsed;
-    try {
-      parsed = JSON.parse(rawJson);
-    } catch (e) {
-      throw new Error("Das ist kein g\xFCltiges JSON. Bitte den Export aus dem ZenOrbit Customizer (Delivery Studio \u2192 JSON) einf\xFCgen.");
-    }
-    if (!parsed || !Array.isArray(parsed.menuItems) || parsed.menuItems.length === 0) {
-      throw new Error('Im JSON fehlt ein "menuItems"-Array. Bitte den Project-JSON-Export aus ZenOrbit einf\xFCgen, nicht den React/CSS-Export.');
-    }
-    await createMockupFromData(parsed, "ZenOrbit Import");
+    const { data } = parseProjectJson(rawJson);
+    await createMockupFromData(data, "ZenOrbit Import");
   }
   figma.ui.onmessage = (msg) => {
     if (msg.type === "generate") {
@@ -244,6 +315,18 @@
     }
     if (msg.type === "importJson") {
       importProjectJson(msg.json || "").then(() => figma.ui.postMessage({ type: "importDone" })).catch((err) => figma.ui.postMessage({ type: "error", message: err instanceof Error ? err.message : String(err) }));
+    }
+    if (msg.type === "validateJson") {
+      try {
+        const { preview } = parseProjectJson(msg.json || "");
+        figma.ui.postMessage({ type: "validationResult", valid: true, preview });
+      } catch (err) {
+        figma.ui.postMessage({
+          type: "validationResult",
+          valid: false,
+          message: err instanceof Error ? err.message : String(err)
+        });
+      }
     }
     if (msg.type === "close") {
       figma.closePlugin();

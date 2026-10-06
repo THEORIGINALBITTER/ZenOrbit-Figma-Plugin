@@ -144,6 +144,21 @@
     resize: vertical;
     margin-bottom: 8px;
   }
+  .preview {
+    display: none;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 8px;
+    line-height: 1.5;
+  }
+  .preview.valid { display: block; border-color: rgba(63,140,96,0.65); }
+  .preview.invalid { display: block; border-color: rgba(208,103,103,0.55); color: var(--danger); }
+  .preview-title { font-weight: 700; margin-bottom: 4px; }
+  .preview-meta { color: var(--text-muted); font-size: 11px; }
+  .preview-labels { color: var(--text-soft); font-size: 10px; margin-top: 4px; }
+  .preview-warning { color: #d8b56d; font-size: 10px; margin-top: 4px; }
 </style>
 </head>
 <body>
@@ -178,7 +193,8 @@
     JSON aus dem ZenOrbit Customizer (Delivery Studio → JSON, „⎘ Copy") hier einfügen — das Plugin zeichnet dieselbe Navigation als Mockup auf den Canvas, mit deinen echten Farben, Winkeln und Labels.
   </p>
   <textarea id="importInput" placeholder='{"menuItems": [...], "radius": 100, ...}' spellcheck="false"></textarea>
-  <button class="btn-secondary" id="importBtn">↑ In Figma erzeugen</button>
+  <div class="preview" id="importPreview" aria-live="polite"></div>
+  <button class="btn-secondary" id="importBtn" disabled>↑ In Figma erzeugen</button>
 
   <script>
     const generateBtn = document.getElementById('generate');
@@ -203,6 +219,28 @@
 
     const importInput = document.getElementById('importInput');
     const importBtn = document.getElementById('importBtn');
+    const importPreview = document.getElementById('importPreview');
+    let validationTimer;
+    const escapeHtml = (value) => String(value)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
+
+    importInput.addEventListener('input', () => {
+      clearTimeout(validationTimer);
+      importBtn.disabled = true;
+      if (!importInput.value.trim()) {
+        importPreview.className = 'preview';
+        importPreview.textContent = '';
+        return;
+      }
+      importPreview.className = 'preview';
+      validationTimer = setTimeout(() => {
+        parent.postMessage({ pluginMessage: { type: 'validateJson', json: importInput.value } }, '*');
+      }, 180);
+    });
     importBtn.addEventListener('click', () => {
       errorBox.style.display = 'none';
       importBtn.textContent = '… wird erzeugt';
@@ -268,6 +306,25 @@
           importBtn.textContent = '↑ In Figma erzeugen';
           importBtn.disabled = false;
         }, 2200);
+      }
+      if (msg.type === 'validationResult') {
+        importBtn.disabled = !msg.valid;
+        if (!msg.valid) {
+          importPreview.className = 'preview invalid';
+          importPreview.innerHTML = `<div class="preview-title">JSON nicht importierbar</div><div>${escapeHtml(msg.message)}</div>`;
+          return;
+        }
+        const preview = msg.preview;
+        const warnings = preview.warnings.length
+          ? `<div class="preview-warning">${preview.warnings.map(escapeHtml).join('<br>')}</div>`
+          : '';
+        importPreview.className = 'preview valid';
+        importPreview.innerHTML = `
+          <div class="preview-title">✓ ZenOrbit-Projekt erkannt</div>
+          <div class="preview-meta">${preview.itemCount} Items · Radius ${preview.radius}px · Button ${preview.buttonSize}px · Logo „${escapeHtml(preview.logoText)}"</div>
+          <div class="preview-labels">${preview.labels.map(escapeHtml).join(' · ')}</div>
+          ${warnings}
+        `;
       }
     };
   </script>
