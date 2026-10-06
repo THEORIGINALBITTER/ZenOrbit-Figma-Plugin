@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<title>ZenOrbit for Figma</title>
+<!-- Zwei Richtungen: "Figma → ZenOrbit" (JSON generieren) und
+     "ZenOrbit → Figma" (JSON importieren, weiter unten). -->
+<style>
+  :root {
+    --bg: #0f0f10;
+    --panel: #1c1c1f;
+    --panel-soft: #262830;
+    --border: #343844;
+    --border-strong: rgba(208,203,184,0.4);
+    --text: #e8e3d7;
+    --text-muted: #c1b8a8;
+    --text-soft: #a79e8f;
+    --gold: #d0cbb8;
+    --danger: #d06767;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
+    font-size: 12px;
+  }
+  body { padding: 16px; }
+  .mark {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .mark span:first-child {
+    font-family: serif;
+    font-size: 18px;
+    color: var(--gold);
+    line-height: 1;
+  }
+  .mark span:last-child {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-soft);
+  }
+  h1 {
+    font-size: 14px;
+    margin: 0 0 8px;
+    color: var(--text);
+  }
+  p {
+    color: var(--text-muted);
+    line-height: 1.6;
+    margin: 0 0 12px;
+  }
+  code {
+    background: var(--panel-soft);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 11px;
+  }
+  button {
+    display: block;
+    width: 100%;
+    padding: 9px 12px;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    margin-bottom: 8px;
+  }
+  .btn-primary {
+    background: var(--gold);
+    color: #1a1a1a;
+    border: 1px solid var(--gold);
+  }
+  .btn-secondary {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+  }
+  .btn-secondary:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .error {
+    display: none;
+    background: rgba(208,103,103,0.12);
+    border: 1px solid rgba(208,103,103,0.4);
+    color: var(--danger);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 11px;
+    line-height: 1.5;
+    margin-bottom: 12px;
+  }
+  textarea {
+    display: none;
+    width: 100%;
+    height: 150px;
+    background: var(--panel);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px;
+    font-family: inherit;
+    font-size: 10px;
+    line-height: 1.5;
+    resize: vertical;
+    margin-bottom: 8px;
+  }
+  .copied {
+    background: rgba(63,140,96,0.18) !important;
+    border-color: #3f8c60 !important;
+    color: #9fe0b8 !important;
+  }
+  .hint {
+    font-size: 10px;
+    color: var(--text-soft);
+    line-height: 1.6;
+    margin-top: 4px;
+  }
+  a { color: var(--gold); }
+  .divider {
+    border-top: 1px solid var(--border);
+    margin: 18px 0 14px;
+  }
+  #importInput {
+    display: block;
+    width: 100%;
+    height: 90px;
+    background: var(--panel);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px;
+    font-family: inherit;
+    font-size: 10px;
+    line-height: 1.5;
+    resize: vertical;
+    margin-bottom: 8px;
+  }
+</style>
+</head>
+<body>
+  <div class="mark"><span>軌</span><span>ZenOrbit for Figma</span></div>
+  <h1>Orbit-Mockup → Project JSON</h1>
+  <p>
+    Noch kein eigenes Mockup? Klicke „Demo-Mockup erzeugen" — das Plugin baut ein Beispiel direkt auf dem Canvas.
+  </p>
+  <button class="btn-secondary" id="createDemo">✦ Demo-Mockup erzeugen</button>
+
+  <p>
+    Wähle ein Frame oder eine Gruppe mit einem Center-Node namens <code>Logo</code> und den Menü-Items drumherum, dann klicke „JSON generieren".
+    Item-Namen im Format <code>Label | /route</code> setzen Label und Route explizit — sonst wird beides aus Textinhalt/Namen abgeleitet.
+  </p>
+
+  <button class="btn-primary" id="generate">JSON generieren</button>
+
+  <div class="error" id="error"></div>
+  <textarea id="output" readonly spellcheck="false"></textarea>
+  <button class="btn-secondary" id="copy" disabled>⎘ In Zwischenablage kopieren</button>
+  <button class="btn-secondary" id="download" disabled>↓ Als .json herunterladen</button>
+
+  <p class="hint">
+    Die Datei passt direkt in den ZenOrbit Customizer unter „Delivery Studio → Project JSON importieren".
+    <a href="https://zenorbit.denisbitter.de/guide#delivery-json" target="_blank" rel="noreferrer">Anleitung im Guide →</a>
+  </p>
+
+  <div class="divider"></div>
+
+  <h1>ZenOrbit → Figma</h1>
+  <p>
+    JSON aus dem ZenOrbit Customizer (Delivery Studio → JSON, „⎘ Copy") hier einfügen — das Plugin zeichnet dieselbe Navigation als Mockup auf den Canvas, mit deinen echten Farben, Winkeln und Labels.
+  </p>
+  <textarea id="importInput" placeholder='{"menuItems": [...], "radius": 100, ...}' spellcheck="false"></textarea>
+  <button class="btn-secondary" id="importBtn">↑ In Figma erzeugen</button>
+
+  <script>
+    const generateBtn = document.getElementById('generate');
+    const createDemoBtn = document.getElementById('createDemo');
+    const copyBtn = document.getElementById('copy');
+    const downloadBtn = document.getElementById('download');
+    const errorBox = document.getElementById('error');
+    const output = document.getElementById('output');
+    let currentJson = '';
+
+    generateBtn.addEventListener('click', () => {
+      errorBox.style.display = 'none';
+      parent.postMessage({ pluginMessage: { type: 'generate' } }, '*');
+    });
+
+    createDemoBtn.addEventListener('click', () => {
+      errorBox.style.display = 'none';
+      createDemoBtn.textContent = '… wird erzeugt';
+      createDemoBtn.disabled = true;
+      parent.postMessage({ pluginMessage: { type: 'createDemo' } }, '*');
+    });
+
+    const importInput = document.getElementById('importInput');
+    const importBtn = document.getElementById('importBtn');
+    importBtn.addEventListener('click', () => {
+      errorBox.style.display = 'none';
+      importBtn.textContent = '… wird erzeugt';
+      importBtn.disabled = true;
+      parent.postMessage({ pluginMessage: { type: 'importJson', json: importInput.value } }, '*');
+    });
+
+    copyBtn.addEventListener('click', async () => {
+      if (!currentJson) return;
+      await navigator.clipboard.writeText(currentJson);
+      copyBtn.textContent = '✓ Kopiert';
+      copyBtn.classList.add('copied');
+      setTimeout(() => {
+        copyBtn.textContent = '⎘ In Zwischenablage kopieren';
+        copyBtn.classList.remove('copied');
+      }, 1600);
+    });
+
+    downloadBtn.addEventListener('click', () => {
+      if (!currentJson) return;
+      const blob = new Blob([currentJson], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'zenorbit-project.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    });
+
+    window.onmessage = (event) => {
+      const msg = event.data.pluginMessage;
+      if (!msg) return;
+      if (msg.type === 'result') {
+        currentJson = msg.json;
+        output.value = msg.json;
+        output.style.display = 'block';
+        copyBtn.disabled = false;
+        downloadBtn.disabled = false;
+      }
+      if (msg.type === 'error') {
+        errorBox.textContent = msg.message;
+        errorBox.style.display = 'block';
+        output.style.display = 'none';
+        copyBtn.disabled = true;
+        downloadBtn.disabled = true;
+        createDemoBtn.textContent = '✦ Demo-Mockup erzeugen';
+        createDemoBtn.disabled = false;
+        importBtn.textContent = '↑ In Figma erzeugen';
+        importBtn.disabled = false;
+      }
+      if (msg.type === 'demoCreated') {
+        createDemoBtn.textContent = '✓ Erzeugt — jetzt "JSON generieren" klicken';
+        setTimeout(() => {
+          createDemoBtn.textContent = '✦ Demo-Mockup erzeugen';
+          createDemoBtn.disabled = false;
+        }, 2200);
+      }
+      if (msg.type === 'importDone') {
+        importBtn.textContent = '✓ In Figma erzeugt';
+        setTimeout(() => {
+          importBtn.textContent = '↑ In Figma erzeugen';
+          importBtn.disabled = false;
+        }, 2200);
+      }
+    };
+  </script>
+</body>
+</html>
