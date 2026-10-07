@@ -5,6 +5,7 @@
   "description": "Figma plugin: converts a Figma orbit-menu mockup into a ZenOrbit Project-JSON, ready to import in the ZenOrbit Customizer.",
   "scripts": {
     "build": "node build.mjs",
+    "package": "npm run build && bash scripts/package.sh",
     "watch": "node build.mjs --watch",
     "test": "node build.mjs && node test/mock-figma-test.mjs"
   },

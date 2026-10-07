@@ -34,6 +34,16 @@ vorbereitete Designdatei testen.
 
 ## Plugin lokal in Figma installieren
 
+### Fertiges Release-Paket
+
+1. Das aktuelle ZIP unter
+   [GitHub Releases](https://github.com/THEORIGINALBITTER/ZenOrbit-Figma-Plugin/releases/latest)
+   herunterladen und entpacken.
+2. In Figma **Plugins → Development → Import plugin from manifest…** öffnen.
+3. Die `manifest.json` aus dem entpackten Ordner auswählen.
+
+### Aus dem Quellcode
+
 1. Repository klonen und Abhängigkeiten installieren:
 
    ```bash
@@ -152,6 +162,7 @@ Befehle:
 ```bash
 npm install
 npm run build
+npm run package
 npm run watch
 npm test
 npx tsc --noEmit
@@ -166,6 +177,7 @@ dist/code.js             gebautes Plugin-Bundle
 dist/ui.html             gebaute Oberfläche
 test/mock-figma-test.mjs automatisierte Figma-API-Mocktests
 manifest.json            Figma-Plugin-Manifest
+scripts/package.sh       erstellt das veröffentlichbare ZIP
 ```
 
 `npm test` baut das Plugin und prüft anschließend:
